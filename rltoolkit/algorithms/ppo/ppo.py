@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 
 
 class PPO(A2C):
+    ####################################################################
+    # Your task is to implement PPO with Generalized Advantage Estimation
+    # (GAE, https://arxiv.org/abs/1506.02438).
+    # Implememnt missing methods from top to bottom.
+    # Warning: you need working A2C class to finish this task.
+    # You can if it's correctly implemented running `pytest rltoolkit/algorithms/a2c/`
+    # in the project root directory. The same works for PPO.
+    ####################################################################
+
     def __init__(
         self,
         epsilon: float = config.PPO_EPSILON,
@@ -97,6 +106,78 @@ class PPO(A2C):
         }
         self.hparams.update(new_hparams)
 
+    def calculate_gae(
+        self,
+        obs: torch.tensor,
+        next_obs: torch.tensor,
+        ends: torch.tensor,
+        done: torch.tensor,
+        q_val: torch.tensor,
+    ) -> torch.tensor:
+        """
+        Calculate advanatage using Generalized Advantage Estimation (GAE).
+
+        Args:
+            obs (torch.tensor): shape: [timesteps_no, obs_size]
+            next_obs (torch.tensor): shape: [timesteps_no, obs_size]
+            ends (torch.tensor): store 1 if a given timestamp was last in a batch,
+                Shape: [timesteps_no]
+            done (torch.tensor): store 1 if a given timestamp was terminating episode
+                Shape: [timesteps_no]
+            q_val (torch.tensor): tensor containing Q values for observations from
+                the buffer. Shape: [timesteps_no]
+
+        Returns:
+            torch.tensor: tensor containing GAE advantages for observations from buffer
+        """
+
+        ###############################################################
+        # You should implement Generalized Advantage Estimation
+        # (https://arxiv.org/pdf/1506.02438.pdf).
+        # You can do it in a following way:
+        #   1. Calculate deltas for all observed states (see paper, between eq. 9 and 10.)
+        #   2. Implement summing gae elements (starting from the last observations),
+        #      taking care of the last element in a batch and the last element in
+        #      a rollout. (see paper, eq. 16)
+        # Hint: ends tensor store 1 if a given timestep was the last one because of the
+        # environment steps limit. This means that for this timestep we need to estimate
+        # state value using critic.
+        # Below are some equations wich can be helpful:
+        # End of your code #
+        # A^1(t) = delta(t)
+        # A^2(t) = delta(t) + gamma * delta(t+1)
+        # A^3(t) = delta(t) + gamma * delta(t+1) + gamma^2 * delta(t+1)
+        # GAE(t) = A^1(t) + lambda * A^2(t) + lambda^2  * A^3(t) + ...
+        # GAE(t) = A^1(t) + lambda * GAE(t+1)
+        ###############################################################
+
+        # Your code is here #
+
+        deltas =  #  torch.tensor Shape: [timesteps_no]
+        # End of your code #
+
+
+        advantage = torch.empty(size=deltas.size())
+
+        discount = self.gae_lambda * self.gamma
+
+        for i, delta in enumerate(reversed(deltas)):
+            idx = -i - 1
+
+            # Your code is here #
+            if done[idx]:
+                prev_state_value =   # type: float
+            elif ends[idx]:
+                prev_state_value = 
+            gae_at_idx = 
+
+            # End of your code #
+            advantage[idx] = gae_at_idx
+            prev_state_value = gae_at_idx
+
+        advantage = advantage.to(self.device)
+        return advantage
+
     def calculate_advantage(self, buffer: Memory) -> torch.tensor:
         """
         Estimate advantage using GAE.
@@ -107,21 +188,49 @@ class PPO(A2C):
         Returns:
             torch.tensor: tensor containing GAE advantages for observations from buffer
         """
-        pass
+        obs = buffer.norm_obs
+        next_obs = buffer.norm_next_obs
 
-    def calculate_gae(self, buffer: Memory, q_val: torch.tensor) -> torch.tensor:
+        reward = torch.tensor(buffer.rewards, dtype=torch.float32, device=self.device)
+        done = torch.tensor(buffer.done, dtype=torch.float32, device=self.device)
+        ends = torch.tensor(buffer.end, dtype=torch.float32, device=self.device)
+
+        with torch.no_grad():
+            # use q_val and gae to obtain advantage
+            # Your code is here #
+
+            advantage =    #  torch.tensor Shape: [timesteps_no]
+            # End of your code #
+
+        return advantage
+
+    def _calculate_l_clip(
+        self,
+        action_logprobs: torch.tensor,
+        new_logprobs: torch.tensor,
+        advantages: torch.tensor,
+    ):
         """
-        Calculate advanatage using Generalized Advantage Estimation (GAE).
-
         Args:
-            buffer (Memory): memory with samples
-            q_val (torch.tensor): tensor containing Q values for observations from
-                the buffer
+            action_logprobs (torch.tensor): shape: [timesteps_no, actions_size]
+            new_logprobs (torch.tensor): [timesteps_no, actions_size]
+            advantages (torch.tensor): [timesteps_no]
 
         Returns:
-            torch.tensor: tensor containing GAE advantages for observations from buffer
+            [type]: (torch.tensor): scalar value
         """
-        pass
+        ###############################################################
+        # Implement L^CLIP loss (see PPO paper, eq. 7)
+        # Hints:
+        #   - Use torch.clamp function
+        #   - Use self.ppo_epsilon
+        ###############################################################
+        # Your code is here #
+        l_clip = 
+        # End of your code #
+        assert l_clip.shape == torch.Size([])
+        return l_clip
+
 
     def update_actor(self, advantages: torch.Tensor, buffer: Memory):
         f"""One iteration of actor update
@@ -130,15 +239,50 @@ class PPO(A2C):
             advantages (torch.Tensor): advantages for observations from buffer
             buffer (Memory): buffer with samples
         """
-        pass
+        advantage_dataset = AdvantageDataset(advantages, buffer, self.normalize_adv)
+        dataloader = DataLoader(
+            advantage_dataset, batch_size=self.ppo_batch_size, shuffle=True
+        )
+        kl_div = 0.0
+        self.loss["actor"] = 0
+        self.loss["entropy"] = 0
+        self.loss["sum"] = 0
 
-    def _clip_loss(
-        self,
-        action_logprobs: torch.tensor,
-        new_logprobs: torch.tensor,
-        advantages: torch.tensor,
-    ):
-        pass
+        for i in range(self.max_ppo_epochs):
+            if kl_div >= self.kl_div_threshold:
+                break
+
+            for advantages, action_logprobs, actions, norm_obs in dataloader:
+                action_logprobs = action_logprobs.detach()
+                # get distribution of actions for the current actor in given states
+                new_dist = self.actor.get_actions_dist(norm_obs)
+                # get log probabilities for taken actions for the current actor
+                new_logprobs = new_dist.log_prob(torch.squeeze(actions))
+
+                entropy = new_dist.entropy().mean()
+
+                ###############################################################
+                # Calculate actor loss
+                # (see PPO paper, eq. 9 but skip the value function component)
+                # Use self._calculate_l_clip method and self.entropy_coef parameter
+                ###############################################################
+                # Your code is here #
+                l_clip = 
+                loss = 
+                # End of your code #
+
+                self.actor_optimizer.zero_grad()
+                loss.backward()
+                self.actor_optimizer.step()
+                self.loss["actor"] += l_clip.item()
+                self.loss["entropy"] += entropy.item()
+                self.loss["sum"] += loss.item()
+
+            kl_div = utils.kl_divergence(action_logprobs.cpu(), new_logprobs.cpu())
+
+        logger.debug(f"PPO update finished after {i} epochs with KL = {kl_div}")
+        self.kl_div_updates_counter += i + 1
+
 
     def add_tensorboard_logs(self, *args, **kwargs):
         super().add_tensorboard_logs(*args, **kwargs)
@@ -165,17 +309,15 @@ class PPO(A2C):
 
 if __name__ == "__main__":
     model = PPO(
-        env_name="Hopper-v2",
-        iterations=1000,
-        max_frames=1e6,
-        gamma=0.99,
-        actor_lr=3e-4,
-        critic_lr=1e-3,
-        batch_size=2000,
-        ppo_batch_size=256,
+        env_name="CartPole-v0",
+        # gamma=0.95,
+        # actor_lr=3e-3,
+        # critic_lr=3e-4,
+        # batch_size=200,
+        # ppo_batch_size=128,
         kl_div_threshold=0.15,
         stats_freq=5,
-        max_ppo_epochs=50,
+        max_ppo_epochs=10,
         tensorboard_dir="logs",
     )
     model.train()
