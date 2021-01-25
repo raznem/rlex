@@ -7,4 +7,7 @@ Before you start install requirements with `pip isntall -r requirements.txt`
 2. Do some experiments in the notebook `notebooks/01-A2C.ipynb`, there you will use your implementation to explore impact of hyperparameters on performance.
 
 ## Part 2. PPO
-Stay tuned
+1. Finish PPO implementation in the `rltoolkit/algorithms/ppo.py`, details are in the script file. 
+
+## Part 3. DDPG
+Stay tuned.
