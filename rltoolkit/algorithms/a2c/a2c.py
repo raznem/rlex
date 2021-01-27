@@ -210,8 +210,10 @@ class A2C(RL):
         # Q(a, s) = r + gamma * V(s') for your Critic from the (r, d, s') tuple.
         # Hint: Pay attention to the gradients and remember about terminal state
         ###############################################################
-        # Your code goes here #
-        q_val = 
+        # Your code is here #
+        next_state_value = self.critic(next_obs)
+        next_state_value = next_state_value.detach()
+        q_val = reward + self.gamma * (1 - done) * next_state_value
         # End of your code #
         return q_val
 
@@ -244,8 +246,11 @@ class A2C(RL):
                 ###############################################################
                 # Implement critic_loss
                 ###############################################################
-                # Your code goes here #
-                critic_loss = 
+                # Your code is here #
+                state_value = self.critic(obs)
+                advantage = q_val - state_value
+
+                critic_loss = 0.5 * advantage.pow(2).mean()
                 # End of your code #
                 self.critic_optimizer.zero_grad()
                 critic_loss.backward()
@@ -281,9 +286,13 @@ class A2C(RL):
             # Calculate advantages for the actions from your buffer
             # Same as in https://spinningup.openai.com/en/latest/spinningup/rl_intro3.html
             ###############################################################
-            # Your code goes here #
-            advantages = 
+            # Your code is here #
+            q_val = self.calculate_q_val(reward, done, next_obs)
+
+            state_value = self.critic(obs)
+            advantages = q_val - state_value
             # End of your code #
+            pass
 
         return advantages
 
@@ -309,8 +318,8 @@ class A2C(RL):
         # Implement policy gradient loss
         # Same as in https://spinningup.openai.com/en/latest/algorithms/vpg.html
         ###############################################################
-        # Your code goes here #
-        actor_loss = 
+        # Your code is here #
+        actor_loss = (-action_logprobs * advantages).mean()
         # End of your code #
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
