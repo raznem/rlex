@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 class DDPG(RL):
+    ###############################################################
+    # This time your task is to implement essential parts of the
+    # DDPG algorithm. You have this DDPG class almost ready, the
+    # only part left for you to finish the update implementation
+    # and generation of noisy actions.
+    ###############################################################
     def __init__(
         self,
         actor_lr: float = config.DDPG_LR,
@@ -167,10 +173,43 @@ class DDPG(RL):
         self.replay_buffer = self.update_obs_mean_std(self.replay_buffer)
         return self.replay_buffer.last_rollout()
 
-    def noise_action(self, obs, act_noise):
-        pass
+    def noise_act(self, obs: torch.Tensor, act_noise: float) -> torch.Tensor:
+        """Noisy actor wrapper
+
+        Args:
+            obs (torch.Tensor): observation tansor
+            act_noise (float): noise multiplier
+
+        Returns:
+            torch.Tensor: noisy actions
+        """
+        ###############################################################
+        # At the beginning implement function that generates noisy
+        # actions from observations. For details, see line 4 in the
+        # pseudocode from https://spinningup.openai.com/en/latest/algorithms/ddpg.html
+        # Hint: use np.clip for action clipping.
+        # Also, note that actor returns 2 values, first is an action and
+        #   the second is a placeholder.
+        ###############################################################
+        action, _ = self._actor.act(obs)
+        action = action.cpu()
+        action_size = self.ac_dim
+        action_high = self.ac_lim.cpu()
+        action_low = -self.ac_lim.cpu()
+        # Your code is here #
+        action = 
+        # End of your code #
+        return action
 
     def initial_act(self, obs) -> torch.Tensor:
+        f"""Randomly generated actions for the warmup stage of the training
+
+        Args:
+            obs (torch.Tensor): observation tensor
+
+        Returns:
+            torch.Tensor: action tensor
+        """
         action = torch.tensor(self.env.action_space.sample()).unsqueeze(0)
         return action
 
@@ -182,13 +221,23 @@ class DDPG(RL):
             batch_size (int): number of samples to collect and train
             *args, **kwargs: arguments for make_update
         """
+        ###############################################################
+        # Off-policy algorithms are usually updated more often than
+        # on-policy. Hence you have slightly different implementation
+        # of data collection. This one doesn't wait for the end of the
+        # episode to make update, but can do this update even during
+        # the rollout. Note that this approach is not limited to off-
+        # policy algortihms and could be used for A2C and PPO as well.
+        # You will work only on the last line of this function -
+        # DDPG update.
+        ###############################################################
         collected = 0
         while collected < batch_size:
             self.stats_logger.rollouts += 1
 
             obs = self.env.reset()
-            # end - end of the episode from perspective of the simulation
-            # done - end of the episode from perspective of the model
+            # end - end of the episode from the perspective of the simulation
+            # done - end of the episode from the perspective of the model
             end = False
             obs = self.process_obs(obs)
             prev_idx = self.replay_buffer.add_obs(obs)
@@ -199,7 +248,7 @@ class DDPG(RL):
                 if self.stats_logger.frames < self.random_frames:
                     action = self.initial_act(obs)
                 else:
-                    action = self.noise_action(obs, self.act_noise)
+                    action = self.noise_act(obs, self.act_noise)
                 action_proc = self.process_action(action, obs)
                 obs, rew, done, _ = self.env.step(action_proc)
                 ep_len += 1
@@ -218,12 +267,18 @@ class DDPG(RL):
                 self.make_update(*args, **kwargs)
 
     def update_condition(self):
+        """Method that checks whether update should be performed.
+
+        Returns:
+            bool: indication of update time
+        """
         return (
             len(self.replay_buffer) > self.update_batch_size
             and self.stats_logger.frames % self.update_freq == 0
         )
 
     def make_update(self):
+        """Perform update self.grad_steps times."""
         if self.update_condition():
             for _ in range(self.grad_steps):
                 batch = self.replay_buffer.sample_batch(
@@ -244,7 +299,26 @@ class DDPG(RL):
         Returns:
             torch.Tensor: Q-function targets for the batch
         """
-        pass
+        ###############################################################
+        # Implement function for calculating target or your Critic from
+        # the (r, d, s') tuple. See line 12 in the:
+        #   https://spinningup.openai.com/en/latest/algorithms/ddpg.html
+        #
+        # Hint: This step is very similar to the Critic target from A2C,
+        # so make sure you have correct gradient flow.
+        # Here and late refer to:
+        #   self.actor_targ: target actor
+        #   self.critic_targ: target critic
+        #   self._actor: actor
+        #   self._critic: critic
+        #   self.gamma: gamma discount factor
+        # P. S. This time critic estimates Q-function, thus it has 2
+        #   arguments.
+        ###############################################################
+        # Your code is here #
+        qfunc_target = 
+        # End of your code #
+        return qfunc_target
 
     def compute_pi_loss(self, obs):
         """Loss for the policy
@@ -255,11 +329,37 @@ class DDPG(RL):
         Returns:
             torch.Tensor: policy loss
         """
-        pass
+        ###############################################################
+        # Compute policy loss. See line 14 in the pseudocode from:
+        #   https://spinningup.openai.com/en/latest/algorithms/ddpg.html
+        # Hint: This step is very similar to the Critic target from A2C,
+        # so make sure you have correct gradient flow.
+        ###############################################################
+        # Your code is here #
+        loss = 
+        # End of your code #
+        return loss
 
     def update_target_nets(self):
         """Update target networks with Polyak averaging"""
-        pass
+        ###############################################################
+        # See line 15 in the pseudocode from:
+        #   https://spinningup.openai.com/en/latest/algorithms/ddpg.html
+        #
+        # To overwrite parameters in the pytorch network use attribute
+        #   <parameters_name>.data
+        ###############################################################
+        rho = 1 - self.tau
+        with torch.no_grad():
+            # Polyak averaging:
+            learned_params = chain(self._critic.parameters(), self._actor.parameters())
+            targets_params = chain(
+                self.critic_targ.parameters(), self.actor_targ.parameters()
+            )
+            for params, targ_params in zip(learned_params, targets_params):
+                # Your code is here #
+                pass
+                # End of your code #
 
     def update(
         self,
@@ -278,7 +378,37 @@ class DDPG(RL):
             reward (torch.Tensor): rewards tensor
             done (torch.Tensor): dones tensor
         """
-        pass
+        ###############################################################
+        # After implementing particalar parts of the DDPG update we
+        # will join them in the update function.
+        # At the beggining implement q-function update.
+        # Refer to the line 13 from OpenAI pseudocode:
+        #   https://spinningup.openai.com/en/latest/algorithms/ddpg.html
+        ###############################################################
+        # Your code is here #
+        loss_q = 
+        # End of your code #
+
+        self.loss["critic"] = loss_q.item()
+        self.critic_optimizer.zero_grad()
+        loss_q.backward()
+        self.critic_optimizer.step()
+
+        ###############################################################
+        # Update of the policy network
+        ###############################################################
+        self._critic.eval()
+        loss = self.compute_pi_loss(obs)
+        self.loss["actor"] = loss.item()
+        self.actor_optimizer.zero_grad()
+        loss.backward()
+        self.actor_optimizer.step()
+
+        ###############################################################
+        # Update of the target networks
+        ###############################################################
+        self.update_target_nets()
+        self._critic.train()
 
     def collect_params_dict(self):
         params_dict = {}
@@ -360,17 +490,12 @@ class DDPG(RL):
 
 
 if __name__ == "__main__":
-    with torch.cuda.device(0):
-        model = DDPG(
-            env_name="HalfCheetah-v2",
-            buffer_size=int(1e6),
-            iterations=5,
-            gamma=0.99,
-            batch_size=200,
-            stats_freq=1,
-            test_episodes=2,
-            use_gpu=True,
-            obs_norm=True,
-            log_dir="optional_logs",
-        )
-        model.train()
+    model = DDPG(
+        env_name="Pendulum-v0",
+        iterations=100,
+        gamma=0.99,
+        batch_size=50,
+        stats_freq=5,
+        test_episodes=2,
+    )
+    model.train()
