@@ -152,10 +152,8 @@ class PPO(A2C):
         ###############################################################
 
         # Your code is here #
-
-        deltas =  #  torch.tensor Shape: [timesteps_no]
-        # End of your code #
-
+        state_value = self.critic(obs)
+        deltas = q_val - state_value.squeeze()
 
         advantage = torch.empty(size=deltas.size())
 
@@ -166,11 +164,10 @@ class PPO(A2C):
 
             # Your code is here #
             if done[idx]:
-                prev_state_value =   # type: float
+                prev_state_value = 0  # type: float
             elif ends[idx]:
-                prev_state_value = 
-            gae_at_idx = 
-
+                prev_state_value = self.critic(next_obs[idx]).squeeze().item()
+            gae_at_idx = prev_state_value * discount + delta
             # End of your code #
             advantage[idx] = gae_at_idx
             prev_state_value = gae_at_idx
@@ -198,8 +195,8 @@ class PPO(A2C):
         with torch.no_grad():
             # use q_val and gae to obtain advantage
             # Your code is here #
-
-            advantage =    #  torch.tensor Shape: [timesteps_no]
+            q_val = self.calculate_q_val(reward, done, next_obs)
+            advantage = self.calculate_gae(obs, next_obs, ends, done, q_val)
             # End of your code #
 
         return advantage
@@ -226,7 +223,9 @@ class PPO(A2C):
         #   - Use self.ppo_epsilon
         ###############################################################
         # Your code is here #
-        l_clip = 
+        ratio = torch.exp(new_logprobs - action_logprobs)
+        clipped_ratio = torch.clamp(ratio, 1 - self.ppo_epsilon, 1 + self.ppo_epsilon)
+        l_clip = -(torch.min(ratio * advantages, clipped_ratio * advantages)).mean()
         # End of your code #
         assert l_clip.shape == torch.Size([])
         return l_clip
@@ -264,11 +263,13 @@ class PPO(A2C):
                 ###############################################################
                 # Calculate actor loss
                 # (see PPO paper, eq. 9 but skip the value function component)
-                # Use self._calculate_l_clip method and self.entropy_coef parameter
+                # Use self._clip_loss method and self.entropy_coef parameter
                 ###############################################################
                 # Your code is here #
-                l_clip = 
-                loss = 
+                l_clip = self._calculate_l_clip(
+                    action_logprobs, new_logprobs, advantages
+                )
+                loss = l_clip - self.entropy_coef * entropy
                 # End of your code #
 
                 self.actor_optimizer.zero_grad()

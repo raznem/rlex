@@ -68,9 +68,9 @@ CLIP_TEST_CASES = [
 @pytest.mark.parametrize(
     "action_logprobs, new_logprobs, advantages, expected_result", CLIP_TEST_CASES
 )
-def test_clip_loss(action_logprobs, new_logprobs, advantages, expected_result):
+def test_calculate_l_clip(action_logprobs, new_logprobs, advantages, expected_result):
     ppo = PPO(epsilon=0.2)
-    result = ppo._clip_loss(action_logprobs, new_logprobs, advantages)
+    result = ppo._calculate_l_clip(action_logprobs, new_logprobs, advantages)
 
     assert expected_result == pytest.approx(result.item(), 0.0001)
     assert result.requires_grad
@@ -127,10 +127,17 @@ def test_calculate_gae(memory):
     ppo._critic = critic_func
     memory.obs_mean = torch.zeros(2)
     memory.obs_std = torch.ones(2)
-    q_value = ppo.calculate_q_val(memory)
+    obs = memory.norm_obs
+    next_obs = memory.norm_next_obs
+
+    reward = torch.tensor(memory.rewards, dtype=torch.float32, device=ppo.device)
+    done = torch.tensor(memory.done, dtype=torch.float32, device=ppo.device)
+    ends = torch.tensor(memory.end, dtype=torch.float32, device=ppo.device)
+
+    q_value = ppo.calculate_q_val(reward, done, next_obs)
     assert torch.equal(expected_q_value.float(), q_value.float())
 
-    result = ppo.calculate_gae(memory, q_value).numpy()
+    result = ppo.calculate_gae(obs, next_obs, ends, done, q_value).numpy()
     np.testing.assert_almost_equal(expected_gae_adv, result, decimal=4)
 
 
