@@ -25,7 +25,6 @@ class SAC_Actor(nn.Module):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         if self.discrete:
-            # action_prob = torch.softmax(self.fc_prob(x), dim=1)
             action_prob = F.gumbel_softmax(self.fc_prob(x), dim=1)
             log_scale = None
             dist = Categorical(action_prob)
