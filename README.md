@@ -11,3 +11,6 @@ Before you start install requirements with `pip isntall -r requirements.txt`
 
 ## Part 3. DDPG
 1. Fill empty spaces of DDPG implementation in the `rltoolkit/algorithms/ddpg/ddpg.py`, details are in the script file. 
+
+## Part 4. SAC
+1. Finish SAC implementation in the `rltoolkit/algorithms/sac/sac.py`, details are in the file. 
